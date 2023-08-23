@@ -24,3 +24,4 @@ bin/
 patchprep.txt
 patch/
 .DS_Store
+tmp/
