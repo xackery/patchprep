@@ -1,0 +1,18 @@
+{
+    "files.associations": {
+        "*.log": "ini",
+    },
+    "go.testEnvVars": {
+        "SINGLE_TEST": "1"
+    },
+    "go.testEnvFile": "${workspaceFolder}/.env",
+    "files.trimTrailingWhitespace": true,
+    "binary-file-viewer.parserFolders": [
+        ".vscode/parsers"
+    ],
+    "search.exclude": {
+        "**/.git": true,
+        "**/test_data": true,
+    },
+    "window.title": "patchprep"
+}

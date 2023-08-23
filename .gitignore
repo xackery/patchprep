@@ -19,3 +19,8 @@
 
 # Go workspace file
 go.work
+bin/
+.env
+patchprep.txt
+patch/
+.DS_Store
