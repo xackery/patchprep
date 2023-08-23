@@ -43,6 +43,7 @@ Help/
 EnvEmitterEffects/
 Broon/
 .DS_Store
+everquest_rof/
 `
 )
 
