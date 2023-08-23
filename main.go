@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/djherbis/times"
 	ignore "github.com/sabhiram/go-gitignore"
 )
 
@@ -45,6 +44,12 @@ EnvEmitterEffects/
 Broon/
 .DS_Store
 `
+)
+
+var (
+	ignores    *ignore.GitIgnore
+	path       string
+	totalBytes int
 )
 
 func main() {
@@ -85,7 +90,7 @@ func run() error {
 	}
 	defer r.Close()
 
-	path := "patch/"
+	path = "patch/"
 	scanner := bufio.NewScanner(r)
 	lines := []string{}
 	lines = append(lines, "patch/")
@@ -125,78 +130,78 @@ func run() error {
 		}
 	}
 
-	ignores := ignore.CompileIgnoreLines(lines...)
+	ignores = ignore.CompileIgnoreLines(lines...)
 
-	err = filepath.WalkDir(".", func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if ignores.MatchesPath(p) {
-			return nil
-		}
-		// check if create date was within last 2 years
-		fi, err := os.Stat(p)
-		if err != nil {
-			return fmt.Errorf("stat %s: %w", p, err)
-		}
-
-		if !fi.Mode().IsRegular() {
-			return nil
-		}
-
-		t, err := times.Stat(p)
-		if err != nil {
-			return fmt.Errorf("times.Stat %s: %w", p, err)
-		}
-		if !t.HasBirthTime() {
-			return fmt.Errorf("no birth time for %s", p)
-		}
-		if time.Now().AddDate(-2, 0, 0).After(t.BirthTime()) {
-			return nil
-		}
-
-		err = os.MkdirAll(path+filepath.Dir(p), 0755)
-		if err != nil {
-			return fmt.Errorf("mkdir %s: %w", path+filepath.Dir(p), err)
-		}
-
-		r, err := os.Open(p)
-		if err != nil {
-			return fmt.Errorf("open %s: %w", p, err)
-		}
-		defer r.Close()
-
-		w, err := os.Create(path + p)
-		if err != nil {
-			return fmt.Errorf("create %s: %w", path+p, err)
-		}
-		defer w.Close()
-
-		_, err = io.Copy(w, r)
-		if err != nil {
-			return fmt.Errorf("copy %s: %w", p, err)
-		}
-
-		// retain datestamps
-		err = os.Chtimes(path+p, fi.ModTime(), fi.ModTime())
-		if err != nil {
-			return fmt.Errorf("chtimes %s: %w", path+p, err)
-		}
-
-		err = os.WriteFile(path+p, []byte{}, 0644)
-		if err != nil {
-			return fmt.Errorf("write %s: %w", path+p, err)
-		}
-		fmt.Println(path + p)
-
-		return nil
-	})
+	err = filepath.WalkDir(".", walkDir)
 	if err != nil {
 		return fmt.Errorf("walkdir: %w", err)
 	}
+
+	// convert to MB
+	fmt.Printf("Copied %.2f MB\n", float64(totalBytes)/1024/1024)
+
+	return nil
+}
+
+func walkDir(p string, d os.DirEntry, err error) error {
+	if err != nil {
+		return err
+	}
+	if d.IsDir() {
+		return nil
+	}
+	if ignores.MatchesPath(p) {
+		return nil
+	}
+	// check if create date was within last 2 years
+	fi, err := os.Stat(p)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", p, err)
+	}
+
+	if !fi.Mode().IsRegular() {
+		return nil
+	}
+
+	if fi.ModTime().Before(time.Now().AddDate(-2, 0, 0)) {
+		return nil
+	}
+
+	err = os.MkdirAll(path+filepath.Dir(p), 0755)
+	if err != nil {
+		return fmt.Errorf("mkdir %s: %w", path+filepath.Dir(p), err)
+	}
+
+	r, err := os.Open(p)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", p, err)
+	}
+	defer r.Close()
+
+	w, err := os.Create(path + p)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path+p, err)
+	}
+	defer w.Close()
+
+	copiedBytes, err := io.Copy(w, io.TeeReader(r, w))
+	if err != nil {
+		return fmt.Errorf("copy %s: %w", p, err)
+	}
+	totalBytes += int(copiedBytes)
+
+	err = w.Sync()
+	if err != nil {
+		return fmt.Errorf("sync %s: %w", path+p, err)
+	}
+
+	// retain datestamps
+	err = os.Chtimes(path+p, fi.ModTime(), fi.ModTime())
+	if err != nil {
+		return fmt.Errorf("chtimes %s: %w", path+p, err)
+	}
+
+	fmt.Println(path + p)
 
 	return nil
 }
